@@ -1,0 +1,4 @@
+A priority queue is a collection of elements such that each element has been assigned a priority and such that the order in which elements are deleted and processed comes from the following rules:
+
+- 1. An element of higher priority is processed before any element of lower priority.
+- 2. two elements with same priority are processed according to the order in which they were added to the queue.ÿÿÿÿ
