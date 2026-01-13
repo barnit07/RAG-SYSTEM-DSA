@@ -148,16 +148,201 @@ def answer_question(question,history):
     answer = response.content
     return answer,chunks
 
+# import os
+# import re
+# from pathlib import Path
+# from typing import List
+
+# from dotenv import load_dotenv
+# from tenacity import retry, wait_exponential
+
+# from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+# from langchain_chroma import Chroma
+# from langchain.prompts import ChatPromptTemplate
+# from langchain_text_splitters import RecursiveCharacterTextSplitter
+# from langchain_community.document_loaders import DirectoryLoader, TextLoader
 
 
-# TEST_QUESTION = "How to delete an element from an array?"
-# TEST_HISTORY = "User previously asked about stack and queue"
+# # ---------------- ENV ----------------
+# load_dotenv(override=True)
 
-# print("\n[TEST] answer_question")
-# answer, used_chunks = answer_question(TEST_QUESTION, TEST_HISTORY)
+# MODEL = "gpt-4.1-nano"
+# COLLECTION_NAME = "docs"
 
-# print("\nANSWER:\n", answer)
-# print("\nChunks used:", len(used_chunks))
+# BASE_DIR = Path(__file__).resolve().parent
+# KB_DIR = BASE_DIR / "knowledge-base"
+# DB_DIR = BASE_DIR / "chroma_db"
+
+# RETRIEVAL_K = 20
+# FINAL_K = 10
+
+# wait = wait_exponential(multiplier=1, min=10, max=240)
+
+# # ---------------- Embeddings ----------------
+# embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
+
+
+# # ---------------- Build / Load Vector DB ----------------
+# def load_or_create_vectorstore() -> Chroma:
+#     if DB_DIR.exists():
+#         vs = Chroma(
+#             persist_directory=str(DB_DIR),
+#             collection_name=COLLECTION_NAME,
+#             embedding_function=embedding_model,
+#         )
+#         if vs._collection.count() > 0:
+#             print(f"✅ Loaded Chroma DB ({vs._collection.count()} chunks)")
+#             return vs
+
+#     print("⚙️ Building Chroma DB from knowledge-base...")
+
+#     loader = DirectoryLoader(
+#         path=str(KB_DIR),
+#         glob="**/*.md",
+#         loader_cls=TextLoader,
+#         loader_kwargs={"encoding": "utf-8"},
+#     )
+#     documents = loader.load()
+
+#     splitter = RecursiveCharacterTextSplitter(
+#         chunk_size=500,
+#         chunk_overlap=200,
+#     )
+#     chunks = splitter.split_documents(documents)
+
+#     vs = Chroma.from_documents(
+#         documents=chunks,
+#         embedding=embedding_model,
+#         persist_directory=str(DB_DIR),
+#         collection_name=COLLECTION_NAME,
+#     )
+
+#     print(f"✅ Chroma DB created ({len(chunks)} chunks)")
+#     return vs
+
+
+# # Build DB at startup
+# vectorstore = load_or_create_vectorstore()
+# retriever = vectorstore.as_retriever(search_kwargs={"k": RETRIEVAL_K})
+
+
+# # ---------------- Query Rewrite ----------------
+# rewrite_prompt = ChatPromptTemplate.from_template("""
+# You are refining a search query for a Data Structures and Algorithms knowledge base.
+
+# Conversation history:
+# {history}
+
+# User question:
+# {question}
+
+# Return ONLY a short, precise search query.
+# Do NOT include question words.
+# """)
+
+# rewrite_llm = ChatOpenAI(model=MODEL)
+# rewrite_chain = rewrite_prompt | rewrite_llm
+
+
+# @retry(wait=wait)
+# def rewrite_query(question, history=""):
+#     return rewrite_chain.invoke({
+#         "question": question,
+#         "history": history
+#     }).content.strip()
+
+
+# # ---------------- Retrieval ----------------
+# def fetch_context_unranked(query):
+#     return retriever.invoke(query)
+
+
+# def merge_chunks(chunks1, chunks2):
+#     seen = {doc.page_content for doc in chunks1}
+#     merged = list(chunks1)
+#     for doc in chunks2:
+#         if doc.page_content not in seen:
+#             merged.append(doc)
+#     return merged
+
+
+# # ---------------- Reranking ----------------
+# rerank_prompt = ChatPromptTemplate.from_template("""
+# You are ranking document chunks by relevance.
+
+# Question:
+# {question}
+
+# Chunks:
+# {chunks}
+
+# Return ONLY a list of chunk IDs in ranked order.
+# """)
+
+# rerank_llm = ChatOpenAI(model=MODEL)
+# rerank_chain = rerank_prompt | rerank_llm
+
+
+# def rerank(question, chunks):
+#     formatted = ""
+#     for i, chunk in enumerate(chunks, 1):
+#         formatted += f"#Chunk {i}\n{chunk.page_content}\n\n"
+
+#     response = rerank_chain.invoke({
+#         "question": question,
+#         "chunks": formatted
+#     }).content
+
+#     order = list(map(int, re.findall(r"\d+", response)))
+#     return [chunks[i - 1] for i in order if 1 <= i <= len(chunks)]
+
+
+# def fetch_context(question):
+#     rewritten = rewrite_query(question)
+#     c1 = fetch_context_unranked(question)
+#     c2 = fetch_context_unranked(rewritten)
+#     merged = merge_chunks(c1, c2)
+#     ranked = rerank(question, merged)
+#     return ranked[:FINAL_K]
+
+
+# # ---------------- Answer Generation ----------------
+# SYSTEM_PROMPT = """
+# You are BlinkNow, an expert assistant for Data Structures and Algorithms.
+
+# Use ONLY the provided context to answer.
+# If the answer is not in the context, say you don't know.
+
+# Context:
+# {context}
+# """
+
+# answer_prompt = ChatPromptTemplate.from_messages([
+#     ("system", SYSTEM_PROMPT),
+#     ("human", "{question}")
+# ])
+
+# answer_llm = ChatOpenAI(model=MODEL)
+# answer_chain = answer_prompt | answer_llm
+
+
+# @retry(wait=wait)
+# def answer_question(question, history=""):
+#     chunks = fetch_context(question)
+#     context = "\n\n".join(
+#         f"{doc.page_content}"
+#         for doc in chunks
+#     )
+
+#     response = answer_chain.invoke({
+#         "question": question,
+#         "context": context
+#     })
+
+#     return response.content, chunks
+
+
+
 
 
 
