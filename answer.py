@@ -10,6 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 
 
+MAX_HISTORY_TURNS=6
 load_dotenv(override=True)
 MODEL= "gpt-4.1-nano"
 db_name= str(Path(__file__).parent/"database")
@@ -106,8 +107,8 @@ def rerank(question, chunks):
     return [chunks[i-1] for i in order if 1 <= i <= len(chunks)]
 
 
-def fetch_context(question):
-    rewritten= rewrite_query(question)
+def fetch_context(question,history):
+    rewritten= rewrite_query(question, history=history)
     chunk1= fetch_context_unranked(question)
     chunk2= fetch_context_unranked(rewritten)
     merged= merge_chunks(chunk1,chunk2)
@@ -117,6 +118,8 @@ def fetch_context(question):
 SYSTEM_PROMPT = """
 You are a knowledgeable, friendly assistant representing the the company called BlinkNow which helps to answer the questions related to Data Structures and Algorithms.
 You are chatting with a user about contents of the Subject Data Structures and Algorithms.
+Conversation so far:
+{history}
 Your answer will be evaluated for accuracy, relevance and completeness, so make sure it only answers the question and fully answers it.
 If you don't know the answer, say so.
 For context, here are specific extracts from the Knowledge Base that might be directly relevant to the user's question:
@@ -135,14 +138,18 @@ answer_chain=answer_prompt | answer_llm
 
 @retry(wait=wait)
 def answer_question(question,history):
-    chunks= fetch_context(question)
+
+    history_lines= history.strip().split("\n")
+    history= "\n".join(history_lines[-MAX_HISTORY_TURNS*2:])
+    chunks= fetch_context(question,history)
     context = "\n\n".join(
         f"Extract from {doc.metadata.get('source', 'unknown')}:\n{doc.page_content}"
         for doc in chunks
     )
     response = answer_chain.invoke({
     "question": question,
-    "context": context
+    "context": context,
+    "history":history
     })
     answer = response.content
     return answer,chunks
