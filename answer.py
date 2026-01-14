@@ -6,8 +6,7 @@ from langchain_core.language_models import LLM
 from tenacity import retry, wait_exponential
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
-from langchain.prompts import ChatPromptTemplate
-from langchain.chains import LLMChain
+from langchain_core.prompts import ChatPromptTemplate
 
 
 
