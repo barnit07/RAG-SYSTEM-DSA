@@ -4,12 +4,12 @@ from answer import answer_question
 # ---------- Helper: format retrieved chunks ----------
 def format_chunks(chunks):
     if not chunks:
-        return "No relevant chunks retrieved."
+        return "No knowledge-base retrieval was required for this question."
 
     formatted = []
     for i, doc in enumerate(chunks, 1):
-        source = doc.metadata.get("source", "unknown") if hasattr(doc, "metadata") else "unknown"
-        text = doc.page_content.strip() if hasattr(doc, "page_content") else str(doc)
+        source = doc.metadata.get("source", "unknown")
+        text = doc.page_content.strip()
 
         formatted.append(
             f"### Chunk {i}\n"
@@ -18,6 +18,7 @@ def format_chunks(chunks):
         )
 
     return "\n\n---\n\n".join(formatted)
+
 
 
 # ---------- Chat handler (Dictionary Format) ----------

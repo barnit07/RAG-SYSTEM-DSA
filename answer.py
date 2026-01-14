@@ -107,13 +107,24 @@ def rerank(question, chunks):
     return [chunks[i-1] for i in order if 1 <= i <= len(chunks)]
 
 
-def fetch_context(question,history):
-    rewritten= rewrite_query(question, history=history)
-    chunk1= fetch_context_unranked(question)
-    chunk2= fetch_context_unranked(rewritten)
-    merged= merge_chunks(chunk1,chunk2)
-    reranked= rerank(question,merged)
+def fetch_context(question, history):
+    rewritten = rewrite_query(question, history=history)
+
+    
+    if not rewritten or len(rewritten.strip()) < 3:
+        return []
+
+    chunk1 = fetch_context_unranked(question)
+    chunk2 = fetch_context_unranked(rewritten)
+
+    if not chunk1 and not chunk2:
+        return []
+
+    merged = merge_chunks(chunk1, chunk2)
+    reranked = rerank(question, merged)
+
     return reranked[:FINAL_K]
+
 
 SYSTEM_PROMPT = """
 You are a knowledgeable, friendly assistant representing the the company called BlinkNow which helps to answer the questions related to Data Structures and Algorithms.
@@ -136,23 +147,51 @@ answer_prompt= ChatPromptTemplate.from_messages([
 answer_llm=ChatOpenAI(model=MODEL)
 answer_chain=answer_prompt | answer_llm
 
-@retry(wait=wait)
-def answer_question(question,history):
+def is_meta_question(question: str) -> bool:
+    meta_phrases = [
+        "what can you do",
+        "what can you answer",
+        "your capabilities",
+        "help me",
+        "who are you",
+        "what is this",
+        "how can you help"
+    ]
+    q = question.lower()
+    return any(p in q for p in meta_phrases)
 
-    history_lines= history.strip().split("\n")
-    history= "\n".join(history_lines[-MAX_HISTORY_TURNS*2:])
-    chunks= fetch_context(question,history)
+
+@retry(wait=wait)
+def answer_question(question, history):
+
+   
+    history_lines = history.strip().split("\n") if history else []
+    history = "\n".join(history_lines[-MAX_HISTORY_TURNS * 2:])
+
+    if is_meta_question(question):
+        response = answer_chain.invoke({
+            "question": question,
+            "context": "",
+            "history": history
+        })
+        return response.content, []
+
+   
+    chunks = fetch_context(question, history)
+
     context = "\n\n".join(
         f"Extract from {doc.metadata.get('source', 'unknown')}:\n{doc.page_content}"
         for doc in chunks
     )
+
     response = answer_chain.invoke({
-    "question": question,
-    "context": context,
-    "history":history
+        "question": question,
+        "context": context,
+        "history": history
     })
-    answer = response.content
-    return answer,chunks
+
+    return response.content, chunks
+
 
 # import os
 # import re
